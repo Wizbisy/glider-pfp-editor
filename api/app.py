@@ -1,72 +1,69 @@
 import os
+import io
 import uuid
-import time
-from io import BytesIO
-from flask import Flask, request, jsonify, send_file
-from flask_cors import CORS
+from itertools import cycle
+from flask import Flask, request, send_file, jsonify
 from PIL import Image
 import requests
-from itertools import cycle
 
 app = Flask(__name__)
-CORS(app)
-
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-ROOT_DIR = os.path.abspath(os.path.join(BASE_DIR, ".."))
-STATIC_FOLDER = os.path.join(ROOT_DIR, "static")
-BACKGROUND_PATH = os.path.join(STATIC_FOLDER, "custom_background.jpg")
 
 REMOVE_BG_KEYS = [os.getenv(f"REMOVE_BG_KEY_{i}") for i in range(1, 21)]
-REMOVE_BG_KEYS = [key for key in REMOVE_BG_KEYS if key]
+REMOVE_BG_KEYS = [k for k in REMOVE_BG_KEYS if k]
 key_cycle = cycle(REMOVE_BG_KEYS)
 REMOVE_BG_API_URL = "https://api.remove.bg/v1.0/removebg"
 
-def remove_background(file_storage):
+STATIC_FOLDER = os.path.join(os.path.dirname(__file__), "static")
+BACKGROUND_PATH = os.path.join(STATIC_FOLDER, "custom_background.jpg")
+os.makedirs(STATIC_FOLDER, exist_ok=True)
+
+def remove_background(image_bytes):
     for _ in range(len(REMOVE_BG_KEYS)):
-        current_key = next(key_cycle)
+        api_key = next(key_cycle)
         try:
-            file_storage.seek(0)
             response = requests.post(
                 REMOVE_BG_API_URL,
-                files={"image_file": (file_storage.filename, file_storage, file_storage.content_type)},
+                files={"image_file": ("image.png", image_bytes, "image/png")},
                 data={"size": "auto"},
-                headers={"X-Api-Key": current_key},
-                timeout=20
+                headers={"X-Api-Key": api_key},
+                timeout=15
             )
             if response.status_code == 200:
-                return BytesIO(response.content)
+                return io.BytesIO(response.content)
             elif response.status_code == 402:
                 continue
-        except:
+            else:
+                raise Exception(f"Remove.bg API error: {response.status_code} {response.text}")
+        except requests.RequestException:
             continue
     raise Exception("All API keys exhausted or failed.")
 
-def blend_with_background(fg_buf):
-    fg = Image.open(fg_buf).convert("RGBA")
-    bg = Image.open(BACKGROUND_PATH).convert("RGBA").resize(fg.size)
-    combined = Image.alpha_composite(bg, fg)
-    out_buf = BytesIO()
-    combined.convert("RGB").save(out_buf, format="JPEG")
-    out_buf.seek(0)
-    return out_buf
+def blend_with_background(fg_bytes):
+    fg_image = Image.open(fg_bytes).convert("RGBA")
+    if os.path.exists(BACKGROUND_PATH):
+        bg_image = Image.open(BACKGROUND_PATH).convert("RGBA").resize(fg_image.size)
+        combined = Image.alpha_composite(bg_image, fg_image)
+        final = combined.convert("RGB")
+    else:
+        final = fg_image.convert("RGB")
+    out_bytes = io.BytesIO()
+    final.save(out_bytes, format="JPEG")
+    out_bytes.seek(0)
+    return out_bytes
 
 @app.route("/api/process", methods=["POST"])
 def process_image():
-    if "file" not in request.files:
+    if 'file' not in request.files:
         return jsonify({"error": "No file uploaded"}), 400
-
-    file = request.files["file"]
+    file = request.files['file']
     if not file.filename:
         return jsonify({"error": "Empty filename"}), 400
-
-    if file.content_length and file.content_length > 2 * 1024 * 1024:
-        return jsonify({"error": "Image must be under 2MB"}), 400
-
     try:
-        removed_buf = remove_background(file)
-        final_buf = blend_with_background(removed_buf)
-        filename = f"{uuid.uuid4().hex}.jpg"
-        return send_file(final_buf, mimetype="image/jpeg", download_name=filename)
+        img_bytes = io.BytesIO(file.read())
+        removed_bg_bytes = remove_background(img_bytes)
+        final_bytes = blend_with_background(removed_bg_bytes)
+        return send_file(final_bytes, mimetype="image/jpeg", as_attachment=True,
+                         download_name=f"glider-{uuid.uuid4().hex}.jpg")
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
