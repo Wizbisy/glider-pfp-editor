@@ -1,0 +1,5 @@
+*.pth
+.git
+*.md
+tests/
+__pycache__/
