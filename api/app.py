@@ -47,6 +47,7 @@ def remove_background_with_removebg(image_path):
                     files={"image_file": image_file},
                     data={"size": "auto"},
                     headers={"X-Api-Key": current_key},
+                    timeout=10
                 )
                 if response.status_code == 200:
                     with NamedTemporaryFile(delete=False, suffix=".png") as temp_result:
