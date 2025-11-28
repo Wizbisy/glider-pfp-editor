@@ -64,17 +64,6 @@ def blend_with_background(foreground_path):
     fg_image = Image.open(foreground_path).convert("RGBA")
     background = Image.open(BACKGROUND_PATH).convert("RGBA").resize(fg_image.size)
     combined = Image.alpha_composite(background, fg_image)
-
-    if os.path.exists(CHARACTER_PATH):
-        character = Image.open(CHARACTER_PATH).convert("RGBA")
-        scale = 0.35
-        new_width = int(fg_image.width * scale)
-        new_height = int(character.height * (new_width / character.width))
-        character = character.resize((new_width, new_height))
-        x = fg_image.width - new_width - 10
-        y = fg_image.height - new_height - 10
-        combined.paste(character, (x, y), character)
-
     return combined.convert("RGB")
 
 @app.route("/")
