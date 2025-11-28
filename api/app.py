@@ -1,8 +1,8 @@
 import os
-import io
 import uuid
+import io
 from itertools import cycle
-from flask import Flask, request, send_file, jsonify
+from flask import Flask, request, jsonify, send_file
 from PIL import Image
 import requests
 
@@ -15,7 +15,8 @@ REMOVE_BG_API_URL = "https://api.remove.bg/v1.0/removebg"
 
 STATIC_FOLDER = os.path.join(os.path.dirname(__file__), "static")
 BACKGROUND_PATH = os.path.join(STATIC_FOLDER, "custom_background.jpg")
-os.makedirs(STATIC_FOLDER, exist_ok=True)
+OUTPUT_FOLDER = os.path.join(STATIC_FOLDER, "output")
+os.makedirs(OUTPUT_FOLDER, exist_ok=True)
 
 def remove_background(image_bytes):
     for _ in range(len(REMOVE_BG_KEYS)):
@@ -46,10 +47,10 @@ def blend_with_background(fg_bytes):
         final = combined.convert("RGB")
     else:
         final = fg_image.convert("RGB")
-    out_bytes = io.BytesIO()
-    final.save(out_bytes, format="JPEG")
-    out_bytes.seek(0)
-    return out_bytes
+    filename = f"{uuid.uuid4().hex}.jpg"
+    output_path = os.path.join(OUTPUT_FOLDER, filename)
+    final.save(output_path, format="JPEG")
+    return filename
 
 @app.route("/api/process", methods=["POST"])
 def process_image():
@@ -61,9 +62,8 @@ def process_image():
     try:
         img_bytes = io.BytesIO(file.read())
         removed_bg_bytes = remove_background(img_bytes)
-        final_bytes = blend_with_background(removed_bg_bytes)
-        return send_file(final_bytes, mimetype="image/jpeg", as_attachment=True,
-                         download_name=f"glider-{uuid.uuid4().hex}.jpg")
+        output_filename = blend_with_background(removed_bg_bytes)
+        return jsonify({"image_url": f"/static/output/{output_filename}"})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
