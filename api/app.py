@@ -86,7 +86,7 @@ def process_image():
 
         file = request.files['file']
         file.seek(0, os.SEEK_END)
-        if file.tell() > 2 * 1024 * 1024:
+        if file.tell() > 12 * 1024 * 1024:
             return jsonify({"error": "Image must be under 2MB"}), 400
         file.seek(0)
 
