@@ -45,7 +45,7 @@ def remove_background_with_removebg(image_path):
                 response = requests.post(
                     REMOVE_BG_API_URL,
                     files={"image_file": image_file},
-                    data={"size": "preview"},
+                    data={"size": "auto"},
                     headers={"X-Api-Key": current_key},
                 )
                 if response.status_code == 200:
